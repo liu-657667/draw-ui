@@ -9,7 +9,7 @@ assert_codex_does_not_create_venv() {
   local name="$1"
   shift
   local venv_path="$test_tmp/$name"
-  DRAW_VENV="$venv_path" "$repo_dir/scripts/ask_draw.sh" "$@" --help >/dev/null
+  DRAW_VENV="$venv_path" bash "$repo_dir/scripts/ask_draw.sh" "$@" --help >/dev/null
   [[ ! -e "$venv_path" ]] || {
     printf 'Codex bootstrap unexpectedly created %s\n' "$venv_path" >&2
     exit 1
@@ -21,7 +21,7 @@ assert_codex_does_not_create_venv equals --provider=codex
 assert_codex_does_not_create_venv repeated --provider zenmux --provider=codex
 
 env_venv="$test_tmp/env-default"
-DRAW_PROVIDER=codex DRAW_VENV="$env_venv" "$repo_dir/scripts/ask_draw.sh" --help >/dev/null
+DRAW_PROVIDER=codex DRAW_VENV="$env_venv" bash "$repo_dir/scripts/ask_draw.sh" --help >/dev/null
 [[ ! -e "$env_venv" ]] || {
   printf 'Codex environment default unexpectedly created %s\n' "$env_venv" >&2
   exit 1
@@ -31,7 +31,7 @@ for bad_args in "--provider" "--provider=" "--provider unknown"; do
   bad_venv="$test_tmp/bad-${bad_args//[^a-zA-Z0-9]/-}"
   set +e
   # shellcheck disable=SC2086
-  DRAW_VENV="$bad_venv" "$repo_dir/scripts/ask_draw.sh" $bad_args >/dev/null 2>&1
+  DRAW_VENV="$bad_venv" bash "$repo_dir/scripts/ask_draw.sh" $bad_args >/dev/null 2>&1
   status=$?
   set -e
   [[ "$status" -eq 2 ]] || {

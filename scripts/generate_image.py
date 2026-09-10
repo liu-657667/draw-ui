@@ -88,6 +88,42 @@ def metadata_path_for(image_path: Path) -> Path:
     return image_path.with_suffix(image_path.suffix + ".json")
 
 
+def _output_paths_for_check(output_path: Path) -> list[Path]:
+    """Return every path that a writer may choose before its MIME type is known."""
+    output_path = output_path.resolve()
+    if output_path.suffix:
+        return [output_path]
+
+    # The current writers default to PNG, while render_response may infer another
+    # image extension from the model response. Include existing siblings so an
+    # unknown future MIME type cannot silently replace one of them.
+    paths = [output_path.with_suffix(".png")]
+    pattern = f"{output_path.name}.*"
+    paths.extend(path for path in output_path.parent.glob(pattern) if path.is_file())
+    return list(dict.fromkeys(paths))
+
+
+def ensure_output_available(output_path: Path) -> None:
+    """Reject an output or its metadata before any remote generation starts."""
+    conflicts: list[Path] = []
+    for candidate in _output_paths_for_check(output_path):
+        if candidate.exists():
+            conflicts.append(candidate)
+        metadata_path = metadata_path_for(candidate)
+        if metadata_path.exists():
+            conflicts.append(metadata_path)
+    if conflicts:
+        paths = ", ".join(str(path) for path in dict.fromkeys(conflicts))
+        raise FileExistsError(f"输出或 metadata 已存在，拒绝覆盖：{paths}")
+
+
+def _write_new_bytes(path: Path, data: bytes) -> None:
+    """Create a file without ever replacing an existing output."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("xb") as handle:
+        handle.write(data)
+
+
 def guess_extension(mime_type: str | None) -> str:
     if not mime_type:
         return ".png"
@@ -216,7 +252,7 @@ def render_response(*, response, output_path: Path) -> tuple[str, str]:
         final_path = output_path
         if not output_path.suffix:
             final_path = output_path.with_suffix(guess_extension(image_mime))
-        final_path.write_bytes(pending_bytes)
+        _write_new_bytes(final_path, pending_bytes)
         image_written = True
     else:
         final_path = output_path
@@ -346,7 +382,7 @@ def request_codex_image(
         image_bytes = base64.b64decode(image_b64, validate=True)
     except (binascii.Error, ValueError, TypeError) as exc:
         raise RuntimeError("Codex image API returned invalid base64 image data.") from exc
-    final_path.write_bytes(image_bytes)
+    _write_new_bytes(final_path, image_bytes)
     return final_path
 
 
@@ -423,16 +459,18 @@ def main() -> int:
     prompt = effective_prompt(args.prompt, args.mode)
     model = resolve_codex_model(args.model) if args.provider == "codex" else (args.model or DEFAULT_MODEL)
 
+    output_path = build_output_path(
+        output_arg=args.output,
+        image_type=args.type,
+        topic=args.name or "image",
+        explicit_name=args.name,
+        ext=".png",
+    )
+    ensure_output_available(output_path)
+
     with tempfile.TemporaryDirectory(prefix="draw-refs-") as tmp:
         tmp_dir = Path(tmp)
         refs = [resolve_ref(raw, tmp_dir) for raw in args.ref]
-        output_path = build_output_path(
-            output_arg=args.output,
-            image_type=args.type,
-            topic=args.name or "image",
-            explicit_name=args.name,
-            ext=".png",
-        )
 
         if args.provider == "codex":
             final_path = request_codex_image(
@@ -467,7 +505,7 @@ def main() -> int:
                 )
                 final_path = output_path if output_path.suffix else output_path.with_suffix(".png")
                 final_path.parent.mkdir(parents=True, exist_ok=True)
-                final_path.write_bytes(image_bytes)
+                _write_new_bytes(final_path, image_bytes)
             else:
                 response = client.models.generate_content(
                     model=model,
@@ -495,7 +533,9 @@ def main() -> int:
             "output_path": str(final_path),
             "response_text": response_text,
         }
-        meta_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        with meta_path.open("x", encoding="utf-8") as handle:
+            handle.write(json.dumps(metadata, ensure_ascii=False, indent=2))
 
     print(f"output_path={final_path}")
     print(f"metadata_path={meta_path}")

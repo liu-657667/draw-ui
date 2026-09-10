@@ -1,134 +1,81 @@
 ---
 name: draw-ui
 description: >
-  Generate UI design mockups and help reconstruct generated UI screenshots into HTML/CSS or WeChat Mini Program WXML/WXSS. Prefer built-in image generation when available; use ZenMux + GPT Image 2 for scripted local outputs, or the optional Codex/OpenAI-compatible provider in Codex environments.
-  TRIGGER when the user says "生成图片", "画图", "设计 UI", "UI 设计", "出图", "create an image", "design a screen",
-  "landing page", "设计稿还原", "截图还原 HTML", "把图片复刻成网页", "微信小程序复刻", "小程序高保真", or when another skill needs image generation.
+  设计简洁现代、有自身风格且便于实现的 App、后台、游戏界面及完整网站落地页，生成 UI 设计稿，并将已有设计稿还原为 HTML/CSS、现有前端项目或微信小程序。
+  用户要求 UI 设计、页面设计稿、完整 landing page、截图还原或小程序高保真时使用。
+  不用于普通插画、海报、故事板、纯图片编辑，也不用于无设计任务的普通业务代码修改；明确要求纯视觉探索时可保留更自由的风格。
 ---
 
 # Draw UI Skill
 
-Prefer the built-in image generation tool when it is available in the current agent/runtime. It is usually simpler, avoids provider drift, and produced landing page mockups at the same quality level as ZenMux in our comparison.
+默认追求简洁、现代、有自身风格的 UI；后台同样需要设计辨识度。已有品牌、明确主题或用户指定风格优先。设计必须同时有清晰层级、真实使用方式和可拆分的组件与素材；业务完整与视觉质量分别验收，不能用文字齐全、对齐规整替代设计成立。
 
-Use `scripts/ask_draw.sh` only when built-in image generation is unavailable, when the user explicitly asks to use ZenMux, or when you need scripted local output paths. The script uses ZenMux by default. Default model: `openai/gpt-image-2`.
+脚本与资源路径相对于本 Skill 目录；在任务目录执行时先解析为绝对路径。设计说明、图片和运行记录保存到任务目录。
 
-In Codex environments, `scripts/ask_draw.sh --provider codex` or `scripts\ask_draw.ps1 --provider codex` can call an OpenAI-compatible Responses API using `OPENAI_IMAGE_API_KEY` or `OPENAI_API_KEY`. The script does not reuse Codex login credentials. Use `--mode replicate` for whole-screen replication, `--mode frame-lock` for preserving app chrome, and `--mode asset-redraw` for local crop-to-clean-asset workflows.
+## 开始前：确定范围和交付物
 
-When the user wants to reconstruct a screenshot or generated mockup into a real app, especially TypeScript, React, Next.js, Vue, Svelte, Electron, Tauri, or an existing frontend repo, read `references/software-reconstruction.md` first. Treat static HTML as a fallback only when no app stack is available or the user explicitly asks for standalone HTML.
+先从当前请求、现有项目和参考图中提取以下信息。信息足够就执行；只有缺失信息会改变核心流程时才集中询问，不要求用户先找参考图。
 
----
+| 判断 | 默认处理 |
+| --- | --- |
+| 页面目标 | 明确用户是谁、要完成什么任务、最重要的操作与真实内容 |
+| 页面范围 | 区分单屏、滚动页面、完整网站落地页和组件局部；官网或落地页默认从导航到页脚，不自行缩成首屏 |
+| 目标设备 | 分开记录逻辑视口和生成图片像素；桌面长页保持桌面布局，不能因为图片竖长就改成手机页 |
+| 交付方式 | 用户只要设计稿时交付图片与简短实现说明；要求还原时才实现代码 |
+| 现有约束 | 复用项目组件、字体、设计规范和已知偏好；保留参考图中指定的固定区域 |
 
-## Onboarding：开始前先问用户这些问题
+生成新 UI 前读取 [UI 设计与验收](references/ui-design.md)。先定视觉方向与信息主次，再把业务内容、组件和素材组织进去；每类界面都要能说明特色来自哪里。将范围、构思、必要内容和实现边界写成短设计说明，不把内部说明画进页面。
 
-如果用户只是泛泛地说“设计一个页面”，先用下面的问题引导用户，收集到足够信息再动手。用户已经给出明确页面、风格或参考图时，可以直接执行，不要为了流程感反复追问。
+默认一次完成设计；只有方向不明确或用户在探索时，先验证视觉方向，再补齐完整内容。每轮按“保留有效特色 → 修正一个主要问题 → 同时检查收益与损失”推进。视觉探索可以暂减非关键样本，但最终稿必须恢复完整需求，不能通过减少功能掩盖设计问题。
 
-### 必问（缺少任何一项都会影响质量）
+完整落地页继续读取 [完整长页](references/full-page.md)，确定全部区块和画布方案后再生成。主题游戏仍是可操作界面；不要仅靠背景和装饰边框表达游戏感。
 
-> **1. 你想设计哪个页面？这个页面的核心功能是什么？**
-> 不能只靠页面名称猜功能——业务理解错了，AI 会画出完全错误的东西。
+## 选择生成工具
 
-> **2. 你有现有的 App 截图或设计稿可以上传吗？**
-> 有截图 → 可以保持导航/侧边栏的视觉一致性。没有也可以生成，但每次结果会有差异。
+用户指定模型或服务时优先遵循，并使用宿主已有的对应工具或 Skill。未指定时优先内置生图工具；需要固定本地输出路径时可使用 `scripts/ask_draw.sh`。脚本接口、模型与比例限制见 [生成工具](references/generation.md)，不要假设选择比例就一定获得目标尺寸。
 
-> **3. 如果有截图，里面有没有你不希望 AI 改动的区域（比如侧边栏、顶部导航）？**
-> 这决定了用哪种参考图策略（见下方）。
+涉及现有应用还原时，先读取 [软件还原](references/software-reconstruction.md)；独立 HTML 或微信小程序读取 [HTML 与小程序还原](references/html-reconstruction.md)。浏览器与开发者工具自动化遵循当前任务授权，禁止绕过用户限制；无法执行时如实记录未验证项。
 
-### 选问（根据情况）
+## 选择参考图策略
 
-> **你偏向什么风格？** 比如：分析型工具、温暖品牌感、极简、游戏感……
-> **需要生成多张保持一致的屏幕吗？**
+用户提供优秀设计参考时，先提取业务焦点、区域主次、字体对比、留白、色面和图像用途。区分值得借鉴的设计关系与只为展示作品添加的外框、背景、透视；跨业务参考要重新组织当前内容，不照搬无关地图、图表或营销模块。将提炼结果写成简短设计方向，再选择是否直接传图。
 
----
-
-## 根据用户回答，选择参考图策略
-
-**核心原则：参考图里有什么内容，AI 就会倾向于模仿什么——包括你不想让它模仿的部分。**
+参考图可能影响内容和构图，明确哪些设计关系需要借鉴、哪些内容需要重新设计。需要视觉对齐时优先核验并使用实际图片输入；脚本不支持时查服务接口，不能把文字转述称为已传参考图。
 
 | 用户情况 | 策略 |
 |---------|------|
-| 没有截图，纯创意探索 | 不传参考图，完全自由生成 |
-| 有截图，但只想锁定导航/侧边栏 ⭐ | 让用户提供或制作**纯净边框图**（把内容区涂成纯色），只传边框 |
-| 有截图，需要整体风格精准对齐 | 传完整截图，但告知用户内容区创意会受影响 |
+| 没有截图，纯创意探索 | 从任务选择明确设计方向，给模型构图与表现空间 |
+| 有截图，只保留导航/侧边栏 | 写清固定范围；必要时在任务目录制作内容区中性的参考副本，保留原图 |
+| 有优秀设计参考，需要借鉴风格 | 传参考图并说明字体、比例、色面和细节关系；按当前业务重组内容 |
+| 有截图，需要精准还原 | 传完整截图，保持指定布局、内容与样式 |
 
-**纯净边框图怎么做**：截一张 App 刚打开时内容区为空白的截图，或用任意工具把内容区覆盖为纯色。
+参考副本的图片处理使用宿主已授权的工具；不要求用户为常规准备工作额外截图。
 
-如果需要生成多张一致的屏幕：**必须串行执行**（一张完成后再开始下一张），不能并行。
+需要沿用同一设计系统的页面或长页片段，先检查基础图，再把固定规则与合适的参考用于延展。多状态流程按 [UI 设计与验收](references/ui-design.md) 记录每一步的变化，不靠生成顺序保证一致性。模型对比冻结提示词与输入；编辑测试可以共用模型生成的基础图，但必须标明来源、向双方提交同一原图，不能只让一方获得额外参考。
 
 ---
 
 ## 设计稿还原为 HTML / 小程序的素材策略
 
-当用户想把生成图、截图或设计稿还原成 HTML/CSS，或直接还原成微信小程序 WXML/WXSS 时，先读取 `references/html-reconstruction.md`。核心原则：页面结构优先代码化；logo、品牌符号、复杂插画、3D/玻璃质感、半透明渐变等难复刻视觉元素要素材化。裁图只作为图生图参考和定位依据，最终放进页面的复杂资产要用图生图重绘，再裁边、抠图和清理边缘。
+在生图前就划分素材与组件：布局、文字、按钮、表格、普通图标和动态数据图表由代码实现；摄影、原创插画和特殊品牌视觉使用独立素材。明确素材边界、宽高比与裁切方式，避免把正文和操作绘进背景。
 
-微信小程序场景不要先生成 HTML 再机械转换。优先直接落到 WXML/WXSS 与 TS/JS：布局、卡片、按钮、文本和常规图标用小程序代码实现；复杂插画、空状态、hero 装饰和品牌视觉单独生成为 PNG/WebP/SVG 资产，放入 `${miniprogramRoot}/assets/`。若 `miniprogramRoot` 为 `miniprogram/`，实际目录就是 `miniprogram/assets/`，WXML 资源路径从该根目录写起，例如分别使用合法的 `mode="aspectFit"` 或 `mode="widthFix"`。验收时在微信开发者工具固定设备预设、页面 viewport 宽高和 DPR；截图只取页面可视区，排除系统状态栏、胶囊按钮和工具栏，再用 `miniprogram-automator`（如需自动化）截图、pixel diff 与人工 side-by-side 检查。
-
-透明素材策略：厂商 logo、深色 wordmark、小号深色图标优先生成大尺寸纯白底素材，再用保守白底转 alpha；复杂彩色插画、hero 装饰、产品图优先绿幕或真实透明输出。不要把小 logo 和大插画塞进同一张素材板。
-
----
+优先复用质量足够的原始素材与项目资源。缺少素材或清晰度不足时再生成或重绘，不默认重画品牌标识，也不把动态数据区域变成图片。还原阶段沿用选定技术栈，先验证结构、文字和交互，再校准视觉细节；具体流程见上述还原资源。
 
 ## 构建提示词
 
-### 两种经过验证有效的写法
+把设计说明与生图提示词分开：说明保存完整实现决定，提示词只传影响当前图像的重点。按任务选择类比探索、业务清单或参考图约束，不机械填写全部字段。完整写法与验收清单见 [UI 设计与验收](references/ui-design.md)。
 
-**类比法（创意效果最好）**
-说"这个工具像什么"，让 AI 借用那个参照物的设计语言，而不是描述布局。
+- 品牌探索用一个有意义的类比激发构图，再给必要内容清单；密集业务界面优先内容关系与准确数据。两者都要给模型明确的自由空间，虚构示例不冒充真实品牌成绩。
+- 明确影响可用性和一致性的尺寸与规则；构图尚未成立时不要先把每个区块锁成同一套分栏、卡片和留白。实现约束用于支撑设计，不替代视觉构思。
+- 类比说明这个产品应该带来怎样的体验，而非列出装饰。例如借用音乐工作台表达复杂信息的组织方式；不要把“杂志感”自动翻译成纸纹。给出少量视觉锚点后允许模型自行探索排版、摄影与构图。
+- 颜色使用 HEX。品牌特色可以来自排版、配色、图片和布局；不把所有页面都压成同一套白底卡片，也不禁用合理的表格、列表或卡片。
+- 提示词保持聚焦；模型或接口的长度限制按当前证据处理，不宣称超过固定字数必然失败。长页内容超出一次输出能力时按完整长页流程分段。
+- 有参考图时写明保留与变化的范围。输出应是正视页面，除非用户明确要展示图，否则不添加设备外壳、透视或页面外装饰。
 
-```
-像乐谱一样解码爆款视频——Think Notion's calm focus meets a music producer's session notes.
-```
+## 检查与交付
 
-**清单法（最稳定，适合需要准确落地的页面）**
-列出页面上有哪些信息，不说怎么排，让 AI 自己决定布局。
+生成后实际打开图片，在对应逻辑视口尺度检查。分别判断视觉构思是否成立与实现边界是否清楚，不把两者合成“看起来能开发”一个结论。再核对范围、文字、层级、组件一致性及内容变化后的可实现性；完整长页还要核对区块顺序、阅读节奏与页脚。详细检查项见 [UI 设计与验收](references/ui-design.md)。
 
-```
-页面包含：用户名和头像、近30天数据趋势图、活跃 Campaign 列表（名称/状态/触达数）、快捷操作入口。
-```
+未通过时先区分内容错误、布局问题和素材问题，针对失败区域修正，不因“还不够好看”就追加整页纹理。成本、重试和保留首轮样本遵循当前任务授权；若用户在做模型对比，记录失败而不擅自补图挑样本。
 
-### 质量规则
-
-- **不写排版规格**（像素、列数、padding）— 描述越具体，AI 越像在执行指令而不是做设计，结果反而更差
-- **给真实示例数据**，不用 placeholder — `"2.3M views, 180K saves"` 比 `"显示播放量"` 效果好十倍
-- **颜色用 HEX**，不用 HSL — `#f9f5f0` 比 `hsl(28 25% 97%)` 对模型更准确
-- 如果传了参考图，在 prompt 开头明确说明哪些区域需要保持不变
-- **Prompt 控制在 800 字以内** — 超长会导致 server disconnect
-
----
-
-## 执行命令
-
-优先级：
-
-1. 有内置生图工具时，优先直接使用内置生图工具。
-2. 用户明确要求 ZenMux，或需要脚本化批量生成、本地固定输出路径时，再使用 `scripts/ask_draw.sh`。
-3. 内置工具和 ZenMux 质量接近时，选择内置工具，减少额外 provider 依赖。
-
-```bash
-# 无参考图
-scripts/ask_draw.sh --type wide --name "screen-name" --prompt "..."
-
-# 传参考图（--frame 自动作为第一个参考）
-scripts/ask_draw.sh \
-  --frame /path/to/reference.png \
-  --type wide \
-  --name "screen-name" \
-  --prompt "..."
-```
-
-**多张屏幕**：必须串行执行（一张完成再开下一张），不能并行。偶发 disconnect 属正常，重试即可。
-
----
-
-## Options
-
-| Flag | 说明 | 默认 |
-|------|------|------|
-| `--type` | `wide`(16:9) / `square`(1:1) / `portrait`(3:4) / `classic`(4:3) | `wide` |
-| `--prompt` | 提示词 | 必填 |
-| `--frame` | 参考图路径 | — |
-| `--ref` | 额外参考图（可重复）| — |
-| `--name` | 输出文件名 | auto |
-| `-o` | 自定义输出路径 | `~/.local/share/draw/outputs/YYYY-MM-DD/` |
-
-成功输出：`output_path=<path>`
-
-API Key 查找顺序：`ZENMUX_API_KEY` 环境变量 → `.env.local`（当前目录往上找）→ `~/.config/see/api_key`
+交付设计图、共用设计说明和未验证项。长页必须提供一张完整预览；采用分段生成时同时提供分段原图；需要代码时交付可运行文件。只完成生图时称“设计稿”，不声称已通过前端还原或交互验证。

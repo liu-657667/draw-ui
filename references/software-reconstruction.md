@@ -2,6 +2,12 @@
 
 Use this workflow when the user wants to turn a screenshot, generated mockup, or UI reference into working application code rather than a standalone HTML file. The default target is a TypeScript frontend, but the same process applies to React, Next.js, Vue, Svelte, Electron, Tauri, or desktop webview apps.
 
+## 实现优先级
+
+先沿用 [UI 设计与验收](ui-design.md) 的设计说明：组件、字体、素材边界与响应式行为。真实内容、状态和操作应能变化；不为匹配生图噪声牺牲正常布局。复用原始素材与品牌标识，只在缺失或质量不合格时重绘。完整落地页先覆盖所有区块，再校准局部，不能只还原首屏。
+
+以下浏览器或开发者工具自动化都受当前任务授权约束。禁止自动化时只运行允许的检查并记录未验证项，不绕过限制。像素对比前核对尺寸、视口和DPR，不能依赖比较脚本的自动resize掩盖差异。
+
 ## Goal
 
 Rebuild the UI inside the existing software architecture, preserving maintainability and behavior while matching the reference image closely. Do not treat this as a one-off static HTML export unless the user explicitly asks for static HTML.
@@ -14,13 +20,13 @@ This is the core author-style workflow adapted for software projects. The key id
    Preserve the original design draft or screenshot. Record canvas size, first-screen viewport, key component positions, and which regions must remain visually consistent.
 
 2. Classify elements.
-   Text, buttons, cards, tables, forms, layout, and ordinary icons become code. Brand marks, complex illustrations, subtle textures, glass/3D material, miniature product panels, and hard-to-code visual blocks become assets.
+   Text, buttons, cards, tables, forms, layout, and ordinary icons become code. Brand marks, photography, illustrations and necessary decorative visuals may use assets. Dynamic charts, product controls and editable labels remain code even when visually complex.
 
 3. Build the skeleton.
    Lock the page width, grid, spacing, typography scale, and responsive behavior first. The software screen must be usable before decorative fidelity work starts.
 
 4. Generate assets.
-   Use local crops only as image-to-image references. Regenerate final assets as clean high-resolution versions, then remove white/green backgrounds or produce transparent PNG/WebP assets.
+   Reuse suitable original assets or clean high-resolution crops first. Regenerate only missing or unsuitable assets, then check resolution, edges and backgrounds.
 
 5. Place assets back into the page.
    Put generated assets into the TypeScript app at the original position, scale, layer, and visual relationship. Do this with real layout constraints rather than one-off absolute hacks unless the existing app uses that pattern.
@@ -52,7 +58,7 @@ Use the lightest level that can match the reference:
 
 - Level 1, layout and tokens: match spacing, sizing, typography, color, radius, shadows, and responsive structure in existing components.
 - Level 2, component reconstruction: create or modify TypeScript components for repeated structures, states, and interactions.
-- Level 3, asset reconstruction: generate or crop images for logos, illustrations, complex glass/3D/gradient textures, and visuals that would be brittle or expensive in CSS.
+- Level 3, asset reconstruction: reuse original assets for photos, brand marks and illustrations; generate replacements only when missing or unsuitable. Editable labels and dynamic data remain code.
 - Level 4, behavior reconstruction: implement tabs, filters, selection, hover/focus states, loading, empty, and error states when they are visible or implied by the screenshot.
 
 ## TypeScript Implementation Rules
@@ -84,13 +90,13 @@ Use this loop when a screenshot contains visual regions that should be filled ba
 3. Run `compare_mockup.py` against the reference and candidate screenshot.
 4. Inspect the heatmap and identify regions where code is the wrong tool: logos, complex illustrations, glass/3D material, decorative product panels, dense integration maps, special textures, or hard-to-code chart ornaments.
 5. For each region, create a named crop from the reference image. Treat the crop as guidance, not as the final asset unless it is already high-resolution and clean.
-6. Generate one asset at a time with `--mode asset-redraw` and the crop as `--frame` or `--ref`.
+6. Reuse an existing clean asset where possible. Only generate missing or unsuitable assets with `--mode asset-redraw` and a reference crop.
 7. Post-process the generated asset: crop padding, remove white or green background, despill edges, and export to the app's asset directory.
 8. Import the asset in the TypeScript component using the project's existing asset pattern.
 9. Place the asset with stable dimensions, `object-fit`, responsive constraints, and accessible alt text when the asset carries meaning.
 10. Capture another browser screenshot and compare again. Iterate region by region instead of regenerating the whole screen.
 
-Do not generate all assets in one sprite sheet unless the output is meant to be machine-cut. Separate large illustrations, logos, small icons, and decorative textures. This keeps each generated asset crisp and makes TypeScript placement predictable.
+For assets that actually require generation, do not combine them in one sprite sheet unless the output is meant to be machine-cut. Separate large illustrations, logos, small icons, and decorative textures. This keeps each generated asset crisp and makes TypeScript placement predictable.
 
 Suggested asset file naming:
 

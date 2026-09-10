@@ -5,6 +5,7 @@ import base64
 import importlib.util
 import json
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -83,6 +84,86 @@ class GenerateImageTests(unittest.TestCase):
             self.assertEqual(request_payload["tools"][0]["size"], "1536x864")
             self.assertEqual(final_path.read_bytes(), png)
             self.assertEqual(captured["request"].headers["Authorization"], "Bearer test-key")
+
+    def test_main_rejects_existing_output_before_resolving_refs_or_calling_provider(self):
+        image_bytes = b"keep-image"
+        metadata_bytes = b"keep-metadata"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "result.png"
+            metadata = generate_image.metadata_path_for(output)
+            output.write_bytes(image_bytes)
+            metadata.write_bytes(metadata_bytes)
+            argv = [
+                "generate_image.py",
+                "--provider",
+                "codex",
+                "--prompt",
+                "draw a test",
+                "--ref",
+                "https://example.test/reference.png",
+                "--output",
+                str(output),
+            ]
+            with (
+                mock.patch.object(sys, "argv", argv),
+                mock.patch.object(generate_image, "resolve_ref", side_effect=AssertionError("reference resolved")),
+                mock.patch.object(generate_image, "request_codex_image", side_effect=AssertionError("provider called")),
+            ):
+                with self.assertRaises(FileExistsError):
+                    generate_image.main()
+
+            self.assertEqual(output.read_bytes(), image_bytes)
+            self.assertEqual(metadata.read_bytes(), metadata_bytes)
+
+    def test_main_writes_new_image_and_metadata(self):
+        image_bytes = b"new-image"
+
+        def fake_request_codex_image(**kwargs):
+            output = kwargs["output_path"]
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(image_bytes)
+            return output
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "result.png"
+            argv = [
+                "generate_image.py",
+                "--provider",
+                "codex",
+                "--prompt",
+                "draw a test",
+                "--output",
+                str(output),
+            ]
+            with (
+                mock.patch.object(sys, "argv", argv),
+                mock.patch.object(generate_image, "request_codex_image", side_effect=fake_request_codex_image),
+            ):
+                self.assertEqual(generate_image.main(), 0)
+
+            self.assertEqual(output.read_bytes(), image_bytes)
+            metadata = generate_image.metadata_path_for(output)
+            self.assertTrue(metadata.exists())
+            self.assertEqual(json.loads(metadata.read_text(encoding="utf-8"))["output_path"], str(output.resolve()))
+
+    def test_render_response_rejects_existing_mime_inferred_suffix(self):
+        original = b"keep-jpeg"
+        generated = b"new-jpeg"
+        inline_data = mock.Mock(
+            data=base64.b64encode(generated).decode("ascii"),
+            mime_type="image/jpeg",
+        )
+        response = mock.Mock(parts=[mock.Mock(text=None, inline_data=inline_data)])
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_base = Path(temp_dir) / "result"
+            inferred_output = output_base.with_suffix(".jpg")
+            inferred_output.write_bytes(original)
+
+            with self.assertRaises(FileExistsError):
+                generate_image.render_response(response=response, output_path=output_base)
+
+            self.assertEqual(inferred_output.read_bytes(), original)
 
 
 if __name__ == "__main__":
