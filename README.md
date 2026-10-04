@@ -95,12 +95,11 @@ npx skills add oil-oil/draw-ui
 
 需要脚本服务时，参阅 [生成工具与接口](references/generation.md)，了解参数、凭据与实际尺寸限制。脚本是可选适配器，页面测量与校准不依赖生图服务。
 
-<table width="100%">
-  <tr>
-    <td width="30%" valign="middle"><a href="https://github.com/oil-oil/oil-ui"><img src="https://raw.githubusercontent.com/oil-oil/oil-ui/main/assets/readme/hero.webp" width="250" alt="oil-ui：把 AI 的 UI 设计能力推到极限"></a></td>
-    <td valign="middle"><strong><a href="https://github.com/oil-oil/oil-ui">想让 AI 做出更好的 UI 设计？试试 oil-ui →</a></strong><br>先探索几种风格，再并排挑选，按实际画面打磨。</td>
-  </tr>
-</table>
+<p align="center">
+  <a href="https://github.com/oil-oil/oil-ui"><img src="https://raw.githubusercontent.com/oil-oil/oil-ui/main/assets/readme/hero.webp" width="600" alt="oil-ui：把 AI 的 UI 设计能力推到极限"></a>
+  <br>
+  <strong><a href="https://github.com/oil-oil/oil-ui">想让 AI 做出更好的 UI 设计？试试 oil-ui →</a></strong><br>先探索几种风格，再并排挑选，按实际画面打磨。
+</p>
 
 <p align="center">
   <a href="https://github.com/oil-oil/beautify-github-readme"><img src="./assets/readme/made-with-beautify.svg" width="300" alt="README made with beautify-github-readme"></a>
